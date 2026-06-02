@@ -50,3 +50,30 @@ The script has been successfully tested on the following hardware and software:
 # List of suspicious numbers (comma-separated, no spaces)
 :local suspiciousNumbers "888,000"
 # ---------------------
+```
+
+**Settings Explanation:**
+* **`botToken` & `chatId`**: Your Telegram bot credentials obtained in Step 1.
+* **`autoDetectPort` (`true` / `false`)**: Set to `true` to let the script automatically find your active `ppp-client` interface. 
+* **`usbPort`**: If `autoDetectPort` is set to `false`, manually specify your modem's USB port name here (e.g., `"usb1"`).
+* **`suspiciousNumbers`**: A comma-separated list of phone numbers (no spaces). If an SMS arrives from one of these numbers, the script will prepend a ⚠️ `[SUSPICIOUS NUMBER]` tag to the Telegram message. This is highly useful for highlighting spam, short-code alerts, or promotional messages.
+
+8. Click **Apply** and **OK**.
+
+### Step 3: Scheduler Setup
+To make the script check for SMS automatically, you need to add it to the scheduler to run once a minute.
+
+**Option A: Via Terminal (CLI)**
+You can simply paste this code into the MikroTik Terminal:
+```routeros
+/system scheduler
+add interval=1m name=check_sms on-event=sms_to_telegram policy=read,write,policy,test
+```
+
+**Option B: Via Winbox/WebFig**
+1. Go to `System` -> `Scheduler`.
+2. Click `+` (Add).
+3. In the **Name** field, enter `check_sms`.
+4. In the **Interval** field, set the check frequency to `00:01:00` (every 1 minute).
+5. In the **On Event** field, enter the name of your script: `sms_to_telegram`.
+6. Click **Apply** and **OK**.
