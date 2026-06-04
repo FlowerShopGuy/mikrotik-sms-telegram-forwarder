@@ -1,6 +1,8 @@
 # ==============================================================================
-# SMS to Telegram Forwarding Script (Smart Concatenation + Auto-detect + Tagging + 7bit UDH Fix)
+# SMS to Telegram Forwarding Script (Smart Concatenation + Auto-detect + Tagging + UDH & Emoji Fix) 
 # ==============================================================================
+
+# Script version: 5.0
 
 # --- SETTINGS BLOCK ---
 :local botToken "YOUR_BOT_TOKEN_HERE"
@@ -15,16 +17,51 @@
 
 :local ucs2ToUrlEncode do={
     :local hexChars "0123456789ABCDEF"; :local result ""
-    :for i from=0 to=([:len $1] - 1) step=4 do={
+    :local i 0
+    :local strLen [:len $1]
+    
+    :while ($i < $strLen) do={
         :local hexVal [:tonum ("0x" . [:pick $1 $i ($i + 4)])]
-        :if ($hexVal < 0x80) do={ :set result ($result . "%" . [:pick $hexChars ($hexVal / 16)] . [:pick $hexChars ($hexVal % 16)]) }
-        :if (($hexVal >= 0x80) and ($hexVal < 0x800)) do={
-            :local b1 (($hexVal >> 6) | 192); :local b2 (($hexVal & 63) | 128)
-            :set result ($result . "%" . [:pick $hexChars ($b1 / 16)] . [:pick $hexChars ($b1 % 16)] . "%" . [:pick $hexChars ($b2 / 16)] . [:pick $hexChars ($b2 % 16)])
+        :set i ($i + 4)
+        :local isSurrogate false
+        
+        # Check for High Surrogate (D800 - DBFF) indicating an Emoji or special char
+        :if (($hexVal >= 0xD800) and ($hexVal <= 0xDBFF) and ($i < $strLen)) do={
+            :local lowSurrogate [:tonum ("0x" . [:pick $1 $i ($i + 4)])]
+            # Check for Low Surrogate (DC00 - DFFF)
+            :if (($lowSurrogate >= 0xDC00) and ($lowSurrogate <= 0xDFFF)) do={
+                :set isSurrogate true
+                :set i ($i + 4)
+                
+                # Calculate True Code Point
+                :local cp (0x10000 + (($hexVal - 0xD800) * 0x400) + ($lowSurrogate - 0xDC00))
+                
+                # Encode as 4-byte UTF-8
+                :local b1 (240 | ($cp >> 18))
+                :local b2 (128 | (($cp >> 12) & 63))
+                :local b3 (128 | (($cp >> 6) & 63))
+                :local b4 (128 | ($cp & 63))
+                
+                :set result ($result . "%" . [:pick $hexChars ($b1 / 16)] . [:pick $hexChars ($b1 % 16)] . \
+                                        "%" . [:pick $hexChars ($b2 / 16)] . [:pick $hexChars ($b2 % 16)] . \
+                                        "%" . [:pick $hexChars ($b3 / 16)] . [:pick $hexChars ($b3 % 16)] . \
+                                        "%" . [:pick $hexChars ($b4 / 16)] . [:pick $hexChars ($b4 % 16)])
+            }
         }
-        :if ($hexVal >= 0x800) do={
-            :local b1 (($hexVal >> 12) | 224); :local b2 ((($hexVal >> 6) & 63) | 128); :local b3 (($hexVal & 63) | 128)
-            :set result ($result . "%" . [:pick $hexChars ($b1 / 16)] . [:pick $hexChars ($b1 % 16)] . "%" . [:pick $hexChars ($b2 / 16)] . [:pick $hexChars ($b2 % 16)] . "%" . [:pick $hexChars ($b3 / 16)] . [:pick $hexChars ($b3 % 16)])
+        
+        # Standard BMP characters (1, 2, or 3 bytes)
+        :if ($isSurrogate = false) do={
+            :if ($hexVal < 0x80) do={ 
+                :set result ($result . "%" . [:pick $hexChars ($hexVal / 16)] . [:pick $hexChars ($hexVal % 16)]) 
+            }
+            :if (($hexVal >= 0x80) and ($hexVal < 0x800)) do={
+                :local b1 (($hexVal >> 6) | 192); :local b2 (($hexVal & 63) | 128)
+                :set result ($result . "%" . [:pick $hexChars ($b1 / 16)] . [:pick $hexChars ($b1 % 16)] . "%" . [:pick $hexChars ($b2 / 16)] . [:pick $hexChars ($b2 % 16)])
+            }
+            :if ($hexVal >= 0x800) do={
+                :local b1 (($hexVal >> 12) | 224); :local b2 ((($hexVal >> 6) & 63) | 128); :local b3 (($hexVal & 63) | 128)
+                :set result ($result . "%" . [:pick $hexChars ($b1 / 16)] . [:pick $hexChars ($b1 % 16)] . "%" . [:pick $hexChars ($b2 / 16)] . [:pick $hexChars ($b2 % 16)] . "%" . [:pick $hexChars ($b3 / 16)] . [:pick $hexChars ($b3 % 16)])
+            }
         }
     }
     :return $result
